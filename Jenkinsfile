@@ -16,7 +16,7 @@ pipeline {
             steps {
                 script {
                     sshagent(credentials : ['dlockamy_ssh']) {
-                        sh "ssh -T -o StrictHostKeyChecking=no dlockamy@$192.168.0.104 \" \
+                        sh "ssh -T -o StrictHostKeyChecking=no dlockamy@192.168.0.104 \" \
                             pwd; \
                             whoami; \
                             \""
