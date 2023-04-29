@@ -17,9 +17,10 @@ pipeline {
                 script {
                     sshagent(credentials : ['dlockamy_ssh']) {
                         sh "ssh -T -o StrictHostKeyChecking=no dlockamy@192.168.0.104 \" \
-                            pwd; \
-                            whoami; \
-                            \""
+                            cd /hive/home/quickring; \
+                            docker-compose down; \
+                            git pull; \
+                            docker-compose -d up; \""
                     }
                 }
             }
