@@ -10,12 +10,14 @@ copy . .
 
 #RUN yarn install
 #RUN yarn build:all
-#RUN yarn install --frozen-lockfile
+RUN yarn install --frozen-lockfile
 
 #RUN rm tsconfig.json
 
 # tsc outputs type definitions to dist-types/ in the repo root, which are then consumed by the build
-#RUN yarn tsc
+RUN yarn tsc
+
+#RUN yarn build:all
 
 # Build the backend, which bundles it all up into the packages/backend/dist folder.
 # The configuration files here should match the one you use inside the Dockerfile below.
