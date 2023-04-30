@@ -6,6 +6,6 @@ services:
       dockerfile: .
       args:
         buildno: 1
-      ports:
-        - 3000:3000
-        - 7007:7007
+    ports:
+      - 3000:3000
+      - 7007:7007
