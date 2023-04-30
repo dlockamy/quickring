@@ -1,32 +1,49 @@
-FROM node:18-slim AS builder
-
-#WORKDIR /app
-
-#USER node
+# Stage 1 - Create yarn install skeleton layer
+FROM node:16-bullseye-slim AS packages
 
 WORKDIR /app
+COPY package.json yarn.lock ./
 
-copy . .
+COPY packages packages
 
-#RUN yarn install
-#RUN yarn build:all
-RUN yarn install --frozen-lockfile
+# Comment this out if you don't have any internal plugins
+COPY plugins plugins
 
-#RUN rm tsconfig.json
+RUN find packages \! -name "package.json" -mindepth 2 -maxdepth 2 -exec rm -rf {} \+
 
-# tsc outputs type definitions to dist-types/ in the repo root, which are then consumed by the build
+# Stage 2 - Install dependencies and build packages
+FROM node:16-bullseye-slim AS build
+
+# install sqlite3 dependencies
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && \
+    apt-get install -y --no-install-recommends libsqlite3-dev python3 build-essential && \
+    yarn config set python /usr/bin/python3
+
+USER node
+WORKDIR /app
+
+COPY --from=packages --chown=node:node /app .
+
+# Stop cypress from downloading it's massive binary.
+ENV CYPRESS_INSTALL_BINARY=0
+RUN --mount=type=cache,target=/home/node/.cache/yarn,sharing=locked,uid=1000,gid=1000 \
+    yarn install --frozen-lockfile --network-timeout 600000
+
+COPY --chown=node:node . .
+
 RUN yarn tsc
+RUN yarn --cwd packages/backend build
+# If you have not yet migrated to package roles, use the following command instead:
+# RUN yarn --cwd packages/backend backstage-cli backend:bundle --build-dependencies
 
-#RUN yarn build:all
+RUN mkdir packages/backend/dist/skeleton packages/backend/dist/bundle \
+    && tar xzf packages/backend/dist/skeleton.tar.gz -C packages/backend/dist/skeleton \
+    && tar xzf packages/backend/dist/bundle.tar.gz -C packages/backend/dist/bundle
 
-# Build the backend, which bundles it all up into the packages/backend/dist folder.
-# The configuration files here should match the one you use inside the Dockerfile below.
-RUN yarn build:backend --config app-config.yaml
-
-
-
-
-FROM node:18-slim
+# Stage 3 - Build the actual backend image and install production dependencies
+FROM node:16-bullseye-slim
 
 # Install sqlite3 dependencies. You can skip this if you don't use sqlite3 in the image,
 # in which case you should also move better-sqlite3 to "devDependencies" in package.json.
@@ -44,20 +61,19 @@ USER node
 # If this occurs, then ensure BuildKit is enabled (`DOCKER_BUILDKIT=1`) so the app dir is correctly created as `node`.
 WORKDIR /app
 
+# Copy the install dependencies from the build stage and context
+COPY --from=build --chown=node:node /app/yarn.lock /app/package.json /app/packages/backend/dist/skeleton/ ./
+
+RUN --mount=type=cache,target=/home/node/.cache/yarn,sharing=locked,uid=1000,gid=1000 \
+    yarn install --frozen-lockfile --production --network-timeout 600000
+
+# Copy the built packages from the build stage
+COPY --from=build --chown=node:node /app/packages/backend/dist/bundle/ ./
+
+# Copy any other files that we need at runtime
+COPY --chown=node:node app-config.yaml ./
+
 # This switches many Node.js dependencies to production mode.
 ENV NODE_ENV production
-
-# Copy repo skeleton first, to avoid unnecessary docker cache invalidation.
-# The skeleton contains the package.json of each package in the monorepo,
-# and along with yarn.lock and the root package.json, that's enough to run yarn install.
-COPY --from=builder  --chown=node:node /app/yarn.lock /app/package.json /app/packages/backend/dist/skeleton.tar.gz ./
-#RUN tar xzf skeleton.tar.gz && rm skeleton.tar.gz
-
-#RUN --mount=type=cache,target=/home/node/.cache/yarn,sharing=locked,uid=1000,gid=1000 \
-#    yarn install --frozen-lockfile --production --network-timeout 300000
-
-# Then copy the rest of the backend bundle, along with any other files we might want.
-COPY --from=builder --chown=node:node /app/packages/backend/dist/bundle.tar.gz /app/app-config*.yaml ./
-RUN tar xzf bundle.tar.gz && rm bundle.tar.gz
 
 CMD ["node", "packages/backend", "--config", "app-config.yaml"]
