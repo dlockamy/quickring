@@ -7,7 +7,11 @@ metadata:
   annotations:
     github.com/project-slug: backstage/backstage
     backstage.io/techdocs-ref: dir:.
+  links:
+    - url: https://dashboard.example.com
+      title: My Dashboard
+      icon: dashboard
 spec:
   type: website
-  owner: john@example.com
+  owner: dlockamy@gmail.com
   lifecycle: experimental
